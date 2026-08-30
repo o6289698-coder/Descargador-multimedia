@@ -141,8 +141,7 @@
   .quality-option:last-child { margin-bottom: 0; }
   .quality-name { font-weight: 700; font-size: 14.5px; color: var(--text); }
   .quality-desc { font-size: 12.5px; color: var(--text-faint); margin-top: 2px; }
-  .quality-option.active { border-color: var(--green); background: linear-gradient(180deg, var(--green-soft), var(--panel-2)); }
-  .quality-check {
+  .quality-option.active { border-color: var(--green); background: linear-gradient(180deg, var(--green-soft), var(--panel-2)); }.quality-check {
     width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--border-light);
     display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   }
@@ -253,9 +252,7 @@
         <span class="toggle-label">Audio</span>
         <span class="toggle-tag">MP3</span>
       </div>
-    </div>
-
-    <button class="action-btn btn-inspect" id="buscarBtn">
+    </div><button class="action-btn btn-inspect" id="buscarBtn">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
       <span id="inspectTexto">Inspeccionar</span>
     </button>
@@ -369,9 +366,7 @@
     urlInput.value = "";
     clearBtn.classList.remove("show");
     urlInput.focus();
-  });
-
-  function renderQualityList() {
+  });function renderQualityList() {
     const niveles = formatoSeleccionado === "mp3" ? NIVELES_AUDIO : NIVELES_VIDEO;
     const seleccionActual = formatoSeleccionado === "mp3" ? calidadAudioSeleccionada : calidadVideoSeleccionada;
     qualityList.innerHTML = "";
@@ -461,4 +456,59 @@
     corazonActivo = !corazonActivo;
     heartBtn.classList.toggle("liked", corazonActivo);
     heartBtn.querySelector("path").setAttribute("fill-opacity", corazonActivo ? "1" : "0");
-    heartMsg.clas
+    heartMsg.classList.toggle("show", corazonActivo);
+  });
+
+  btn.addEventListener("click", async () => {
+    const url = urlInput.value.trim();
+    if (!url) {
+      mostrarMensaje("Por favor pega un enlace válido.", "error");
+      return;
+    }
+
+    const calidad = formatoSeleccionado === "mp3" ? calidadAudioSeleccionada : calidadVideoSeleccionada;
+
+    btn.disabled = true;
+    btnTexto.innerHTML = '';
+    const spinner = document.createElement("span");
+    spinner.className = "spinner";
+    btn.insertBefore(spinner, btnTexto);
+    btnTexto.textContent = "Descargando...";
+    mensaje.style.display = "none";
+
+    try {
+      const res = await fetch("/api/descargar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, formato: formatoSeleccionado, calidad }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Ocurrió un error al descargar.");
+      }
+
+      const disposicion = res.headers.get("Content-Disposition") || "";
+      const match = disposicion.match(/filename="?([^"]+)"?/);
+      const nombreArchivo = match ? match[1] : `descarga.${formatoSeleccionado}`;
+
+      const blob = await res.blob();
+      const enlace = document.createElement("a");
+      enlace.href = URL.createObjectURL(blob);
+      enlace.download = nombreArchivo;
+      document.body.appendChild(enlace);
+      enlace.click();
+      enlace.remove();
+
+      mostrarMensaje("¡Descarga completada! 🎉", "ok");
+    } catch (err) {
+      mostrarMensaje(err.message, "error");
+    } finally {
+      btn.disabled = false;
+      spinner.remove();
+      btnTexto.textContent = "Descargar";
+    }
+  });
+</script>
+</body>
+</html>
