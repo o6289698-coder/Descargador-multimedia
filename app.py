@@ -1,6 +1,8 @@
 import os
-import requests
-from flask import Flask, render_template_string, request, jsonify
+import shutil
+import uuid
+from flask import Flask, render_template_string, request, jsonify, send_file, after_this_request
+import yt_dlp
 
 app = Flask(__name__)
 
@@ -12,30 +14,145 @@ HTML_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Descargador Multimedia</title>
     <style>
-        body { font-family: Arial, sans-serif; background-color: #121212; color: #fff; text-align: center; padding: 20px; }
-        .container { max-width: 500px; margin: 0 auto; background: #1e1e1e; padding: 20px; border-radius: 10px; }
-        input[type="text"] { width: 90%; padding: 10px; margin-bottom: 10px; border-radius: 5px; border: 1px solid #333; background: #2a2a2a; color: #fff; }
-        select, button { padding: 10px 15px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; }
-        button { background-color: #ff0055; color: white; }
-        .result { margin-top: 20px; word-break: break-all; }
-        .download-btn { display: inline-block; padding: 12px 24px; background: #00e676; color: #000; text-decoration: none; border-radius: 5px; font-weight: bold; margin-top: 15px; }
-        
-        .heart-section { margin-top: 30px; }
-        .heart-btn { background: none; border: none; font-size: 2rem; cursor: pointer; color: #ff1744; outline: none; transition: transform 0.2s; }
-        .heart-btn:hover { transform: scale(1.2); }
-        .love-message { color: #00e676; font-weight: bold; font-size: 1.2rem; margin-top: 10px; display: none; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: linear-gradient(135deg, #0f172a, #1e293b); 
+            color: #f8fafc; 
+            text-align: center; 
+            padding: 40px 20px; 
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .container { 
+            width: 100%;
+            max-width: 480px; 
+            background: rgba(30, 41, 59, 0.85); 
+            backdrop-filter: blur(10px);
+            padding: 30px; 
+            border-radius: 16px; 
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+        }
+        h2 {
+            color: #38bdf8;
+            margin-bottom: 25px;
+            font-size: 1.6rem;
+            letter-spacing: 0.5px;
+        }
+        input[type="text"] { 
+            width: 88%; 
+            padding: 12px 15px; 
+            margin-bottom: 15px; 
+            border-radius: 8px; 
+            border: 1px solid #334155; 
+            background: #0f172a; 
+            color: #f8fafc; 
+            font-size: 0.95rem;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        input[type="text"]:focus {
+            border-color: #38bdf8;
+        }
+        select, button { 
+            padding: 12px 20px; 
+            border-radius: 8px; 
+            border: none; 
+            font-weight: bold; 
+            cursor: pointer; 
+            font-size: 0.95rem;
+        }
+        select {
+            background: #0f172a;
+            color: #f8fafc;
+            border: 1px solid #334155;
+            margin-right: 8px;
+            outline: none;
+        }
+        button[type="submit"] { 
+            background: linear-gradient(135deg, #0284c7, #0ea5e9); 
+            color: white; 
+            transition: opacity 0.2s, transform 0.1s;
+        }
+        button[type="submit"]:hover { 
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+        .result { 
+            margin-top: 20px; 
+            word-break: break-all; 
+            font-size: 0.9rem;
+        }
+        .result h3 {
+            color: #34d399;
+            font-size: 1rem;
+            margin-bottom: 10px;
+        }
+        .download-btn { 
+            display: inline-block; 
+            padding: 12px 24px; 
+            background: linear-gradient(135deg, #059669, #10b981); 
+            color: #fff; 
+            text-decoration: none; 
+            border-radius: 8px; 
+            font-weight: bold; 
+            margin-top: 10px;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+            transition: transform 0.1s;
+        }
+        .download-btn:hover {
+            transform: translateY(-1px);
+        }
+        .heart-section { 
+            margin-top: 30px; 
+        }
+        .heart-btn { 
+            background: none; 
+            border: none; 
+            font-size: 2.2rem; 
+            cursor: pointer; 
+            color: #f43f5e; 
+            outline: none; 
+            transition: transform 0.2s; 
+        }
+        .heart-btn:hover { 
+            transform: scale(1.25); 
+        }
+        .love-message { 
+            color: #34d399; 
+            font-weight: bold; 
+            font-size: 1.1rem; 
+            margin-top: 10px; 
+            display: none; 
+        }
+        .dev-credit { 
+            margin-top: 30px; 
+            font-size: 0.85rem; 
+            color: #94a3b8; 
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            padding-top: 15px;
+        }
+        .dev-credit span {
+            color: #38bdf8;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h2>Descargador de Video y Audio</h2>
         <form id="download-form">
-            <input type="text" id="url" placeholder="Pega el enlace de YouTube aquí..." required><br>
-            <select id="format">
-                <option value="mp4">Video MP4</option>
-                <option value="mp3">Audio MP3</option>
-            </select>
-            <button type="submit">Procesar</button>
+            <input type="text" id="url" placeholder="Pega el enlace de Facebook aquí..." required><br>
+            <div style="display: flex; justify-content: center; gap: 5px;">
+                <select id="format">
+                    <option value="mp4">Video MP4</option>
+                    <option value="mp3">Audio MP3</option>
+                </select>
+                <button type="submit">Procesar</button>
+            </div>
         </form>
         <div id="result" class="result"></div>
 
@@ -43,13 +160,17 @@ HTML_TEMPLATE = """
             <button type="button" class="heart-btn" id="heart-btn">❤️</button>
             <div id="love-message" class="love-message">Te amo Alexa</div>
         </div>
+
+        <div class="dev-credit">
+            Desarrollado por <span>Erick</span> 💻✨
+        </div>
     </div>
 
     <script>
         document.getElementById('download-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const resultDiv = document.getElementById('result');
-            resultDiv.innerHTML = "Obteniendo enlace de descarga...";
+            resultDiv.innerHTML = "<span style='color: #38bdf8;'>Procesando archivo... Esto puede tardar unos segundos.</span>";
             
             const url = document.getElementById('url').value;
             const format = document.getElementById('format').value;
@@ -64,13 +185,14 @@ HTML_TEMPLATE = """
                 const data = await response.json();
                 if (data.success) {
                     resultDiv.innerHTML = `
-                        <a href="${data.download_url}" target="_blank" class="download-btn">Descargar ${format.toUpperCase()}</a>
+                        <h3>${data.title}</h3>
+                        <a href="/download_file?file=${encodeURIComponent(data.file_id)}&name=${encodeURIComponent(data.title)}&ext=${format}" class="download-btn">Descargar ${format.toUpperCase()}</a>
                     `;
                 } else {
-                    resultDiv.innerHTML = `<p style="color: #ff5252;">Error: ${data.error}</p>`;
+                    resultDiv.innerHTML = `<p style="color: #f87171;">Error: ${data.error}</p>`;
                 }
             } catch (err) {
-                resultDiv.innerHTML = `<p style="color: #ff5252;">Error de conexión con el servidor.</p>`;
+                resultDiv.innerHTML = `<p style="color: #f87171;">Error de conexión con el servidor.</p>`;
             }
         });
 
@@ -93,37 +215,66 @@ def procesar():
     url = data.get('url')
     formato = data.get('format', 'mp4')
 
-    payload = {
-        "url": url,
-        "downloadMode": "audio" if formato == "mp3" else "auto"
+    file_id = str(uuid.uuid4())
+    out_template = f'/tmp/{file_id}.%(ext)s'
+
+    ydl_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'outtmpl': out_template,
+        'format': 'best' if formato == 'mp4' else 'bestaudio/best',
     }
 
-    headers = {
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0"
-    }
+    if formato == 'mp3':
+        ydl_opts['postprocessors'] = [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }]
 
     try:
-        response = requests.post("https://api.cobalt.tools/", json=payload, headers=headers)
-        res_data = response.json()
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            title = info.get('title', 'video_descargado')
 
-        # Cobalt puede devolver la URL directamente en 'url' o dentro de un objeto 'picker'
-        download_url = res_data.get('url')
-        if not download_url and 'picker' in res_data and len(res_data['picker']) > 0:
-            download_url = res_data['picker'][0].get('url')
+            actual_filename = None
+            for f in os.listdir('/tmp'):
+                if f.startswith(file_id):
+                    actual_filename = f
+                    break
 
-        if response.status_code == 200 and download_url:
+            if not actual_filename:
+                return jsonify({'success': False, 'error': 'No se pudo generar el archivo de salida.'})
+
             return jsonify({
                 'success': True,
-                'download_url': download_url
+                'title': title,
+                'file_id': actual_filename
             })
-        else:
-            error_msg = res_data.get('text', res_data.get('message', 'No se pudo obtener el enlace.'))
-            return jsonify({'success': False, 'error': str(error_msg)})
-            
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/download_file')
+def download_file():
+    file_id = request.args.get('file')
+    name = request.args.get('name', 'video')
+    ext = request.args.get('ext', 'mp4')
+    
+    file_path = os.path.join('/tmp', file_id)
+
+    if not os.path.exists(file_path):
+        return "El archivo ya no está disponible o caducó.", 404
+
+    @after_this_request
+    def cleanup(response):
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        except Exception:
+            pass
+        return response
+
+    return send_file(file_path, as_attachment=True, download_name=f"{name}.{ext}")
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
