@@ -4,7 +4,7 @@ from flask import Flask, request, jsonify, send_from_directory, send_file, after
 from flask_cors import CORS
 import yt_dlp
 
-app = Flask(__name__, static_folder='static')
+app = Flask(__name__, static_url_path='', static_folder='static')
 CORS(app)
 
 @app.route('/')
@@ -13,13 +13,17 @@ def serve_index():
 
 @app.route('/api/info', methods=['POST'])
 def get_video_info():
-    data = request.json
+    data = request.json or {}
     url = data.get('url')
 
     if not url:
         return jsonify({'error': 'Por favor ingresa un enlace válido'}), 400
 
-    ydl_opts = {'quiet': True, 'no_warnings': True}
+    ydl_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -57,11 +61,11 @@ def get_video_info():
                 'formats': formats
             })
     except Exception as e:
-        return jsonify({'error': 'No se pudo procesar el video. Verifica la URL.'}), 500
+        return jsonify({'error': f'No se pudo obtener el video: {str(e)}'}), 500
 
 @app.route('/api/download', methods=['POST'])
 def download_video():
-    data = request.json
+    data = request.json or {}
     url = data.get('url')
     format_id = data.get('format_id')
     format_type = data.get('type')
