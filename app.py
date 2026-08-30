@@ -1,8 +1,6 @@
 import os
-import shutil
-import uuid
-from flask import Flask, render_template_string, request, jsonify, send_file, after_this_request
-import yt_dlp
+import requests
+from flask import Flask, render_template_string, request, jsonify
 
 app = Flask(__name__)
 
@@ -51,7 +49,7 @@ HTML_TEMPLATE = """
         document.getElementById('download-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const resultDiv = document.getElementById('result');
-            resultDiv.innerHTML = "Procesando descarga en el servidor... espera un momento.";
+            resultDiv.innerHTML = "Obteniendo enlace de descarga...";
             
             const url = document.getElementById('url').value;
             const format = document.getElementById('format').value;
@@ -66,9 +64,7 @@ HTML_TEMPLATE = """
                 const data = await response.json();
                 if (data.success) {
                     resultDiv.innerHTML = `
-                        <h3>${data.title}</h3>
-                        <img src="${data.thumbnail}" width="100%" style="border-radius: 8px;"><br>
-                        <a href="/download_file?file=${encodeURIComponent(data.file_id)}&name=${encodeURIComponent(data.title)}&ext=${format}" class="download-btn">Descargar ${format.toUpperCase()}</a>
+                        <a href="${data.download_url}" target="_blank" class="download-btn">Descargar ${format.toUpperCase()}</a>
                     `;
                 } else {
                     resultDiv.innerHTML = `<p style="color: #ff5252;">Error: ${data.error}</p>`;
@@ -97,74 +93,32 @@ def procesar():
     url = data.get('url')
     formato = data.get('format', 'mp4')
 
-    file_id = str(uuid.uuid4())
-    out_template = f'/tmp/{file_id}.%(ext)s'
-
-    ydl_opts = {
-        'quiet': True,
-        'no_warnings': True,
-        'outtmpl': out_template,
-        'format': 'bestaudio/best' if formato == 'mp3' else 'best',
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android_creator', 'ios', 'mweb']
-            }
-        }
+    # Configuración de la petición a la API pública de Cobalt
+    payload = {
+        "url": url,
+        "downloadMode": "audio" if formato == "mp3" else "auto"
     }
 
-    # Intentar usar cookies solo si existen y no están vacías
-    secret_cookies = '/etc/secrets/cookies.txt'
-    temp_cookies = '/tmp/cookies.txt'
-
-    if os.path.exists(secret_cookies) and os.path.getsize(secret_cookies) > 0:
-        shutil.copy(secret_cookies, temp_cookies)
-        ydl_opts['cookiefile'] = temp_cookies
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json"
+    }
 
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            title = info.get('title', 'archivo')
-            thumbnail = info.get('thumbnail', '')
+        response = requests.post("https://api.cobalt.tools/", json=payload, headers=headers)
+        res_data = response.json()
 
-            actual_filename = None
-            for f in os.listdir('/tmp'):
-                if f.startswith(file_id):
-                    actual_filename = f
-                    break
-
-            if not actual_filename:
-                return jsonify({'success': False, 'error': 'No se pudo generar el archivo.'})
-
+        if response.status_code == 200 and "url" in res_data:
             return jsonify({
                 'success': True,
-                'title': title,
-                'thumbnail': thumbnail,
-                'file_id': actual_filename
+                'download_url': res_data['url']
             })
+        else:
+            error_msg = res_data.get('text', 'No se pudo obtener el enlace.')
+            return jsonify({'success': False, 'error': error_msg})
+            
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
-
-@app.route('/download_file')
-def download_file():
-    file_id = request.args.get('file')
-    name = request.args.get('name', 'video')
-    ext = request.args.get('ext', 'mp4')
-    
-    file_path = os.path.join('/tmp', file_id)
-
-    if not os.path.exists(file_path):
-        return "El archivo ya no está disponible.", 404
-
-    @after_this_request
-    def cleanup(response):
-        try:
-            if os.path.exists(file_path):
-                os.remove(file_path)
-        except Exception:
-            pass
-        return response
-
-    return send_file(file_path, as_attachment=True, download_name=f"{name}.{ext}")
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
