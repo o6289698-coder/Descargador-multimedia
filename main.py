@@ -1,6 +1,5 @@
 import os
 import glob
-import shutil
 import uuid
 import tempfile
 import threading
@@ -14,34 +13,16 @@ app = Flask(__name__)
 DOWNLOAD_DIR = os.path.join(tempfile.gettempdir(), "descargas_app")
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-# Carpeta donde subimos, como "Secret Files" en Render, uno o varios
-# archivos de cookies: cookies_1.txt, cookies_2.txt, etc. Esa carpeta es
-# de SOLO LECTURA en Render, y yt-dlp necesita poder escribir en el
-# archivo de cookies que usa (actualiza tokens al usarlo), así que
-# copiamos cada archivo a una carpeta temporal escribible antes de
-# pasárselo a yt-dlp.
-COOKIES_DIR_ORIGEN = os.environ.get("COOKIES_DIR", "/etc/secrets")
-COOKIES_DIR_ESCRIBIBLE = os.path.join(tempfile.gettempdir(), "cookies_writable")
-os.makedirs(COOKIES_DIR_ESCRIBIBLE, exist_ok=True)
+# Carpeta donde subiremos, como "Secret Files" en Render, uno o varios
+# archivos de cookies: cookies_1.txt, cookies_2.txt, cookies_3.txt, etc.
+# Si una cuenta falla o queda bloqueada temporalmente, se prueba la
+# siguiente automáticamente.
+COOKIES_DIR = os.environ.get("COOKIES_DIR", "/etc/secrets")
 
 
 def obtener_archivos_cookies():
-    """
-    Copia cada cookies*.txt de la carpeta de solo lectura a una carpeta
-    escribible (si no se copio ya) y devuelve las rutas escribibles.
-    """
-    patrones = sorted(glob.glob(os.path.join(COOKIES_DIR_ORIGEN, "cookies*.txt")))
-    rutas_escribibles = []
-    for origen in patrones:
-        nombre = os.path.basename(origen)
-        destino = os.path.join(COOKIES_DIR_ESCRIBIBLE, nombre)
-        try:
-            if not os.path.exists(destino) or os.path.getmtime(origen) > os.path.getmtime(destino):
-                shutil.copyfile(origen, destino)
-            rutas_escribibles.append(destino)
-        except OSError:
-            continue
-    return rutas_escribibles
+    patrones = sorted(glob.glob(os.path.join(COOKIES_DIR, "cookies*.txt")))
+    return patrones
 
 
 def limpiar_archivos_viejos(carpeta, minutos=30):
@@ -85,14 +66,17 @@ def opciones_base(player_clients=None, archivo_cookies=None):
 
 def extraer_info_con_reintentos(url, opts_extra=None):
     """
-    Prueba, en orden, cada combinacion de (archivo de cookies x estrategia
+    Prueba, en orden, cada combinación de (archivo de cookies x estrategia
     de cliente) hasta que una funcione. Si no hay archivos de cookies
-    configurados, simplemente prueba las estrategias sin cookies.
+    configurados, simplemente prueba las estrategias sin cookies (como
+    antes).
     """
     es_youtube = "youtube.com" in url or "youtu.be" in url
     estrategias_cliente = ESTRATEGIAS_YOUTUBE if es_youtube else [None]
 
     archivos_cookies = obtener_archivos_cookies()
+    # None al inicio = también probamos sin cookies primero (por si la
+    # cuenta no hace falta para ese video en particular)
     opciones_cookies = [None] + archivos_cookies
 
     ultimo_error = None
@@ -121,15 +105,15 @@ def info():
     url = (data.get("url") or "").strip()
 
     if not url:
-        return jsonify({"error": "Por favor pega un enlace valido."}), 400
+        return jsonify({"error": "Por favor pega un enlace válido."}), 400
 
     try:
         resultado = extraer_info_con_reintentos(url, opts_extra={"_download": False})
     except Exception as e:
         return jsonify({
             "error": (
-                "No se pudo obtener informacion del video. El enlace puede "
-                "ser invalido, privado, o la plataforma esta bloqueando "
+                "No se pudo obtener información del video. El enlace puede "
+                "ser inválido, privado, o la plataforma está bloqueando "
                 f"temporalmente la solicitud. Detalle: {e}"
             )
         }), 500
@@ -150,7 +134,10 @@ def info():
         "duracion": resultado.get("duration"),
         "canal": resultado.get("uploader") or resultado.get("channel"),
         "calidades_video": calidades_video if calidades_video else [1080, 720, 480, 360],
-    })@app.route("/api/descargar", methods=["POST"])
+    })
+
+
+@app.route("/api/descargar", methods=["POST"])
 def descargar():
     data = request.get_json(silent=True) or {}
     url = (data.get("url") or "").strip()
@@ -158,9 +145,9 @@ def descargar():
     calidad = data.get("calidad")
 
     if not url:
-        return jsonify({"error": "Por favor pega un enlace valido."}), 400
+        return jsonify({"error": "Por favor pega un enlace válido."}), 400
     if formato not in ("mp4", "mp3"):
-        return jsonify({"error": "Formato no valido."}), 400
+        return jsonify({"error": "Formato no válido."}), 400
 
     threading.Thread(target=limpiar_archivos_viejos, args=(DOWNLOAD_DIR,)).start()
 
@@ -199,7 +186,7 @@ def descargar():
         return jsonify({
             "error": (
                 "No se pudo descargar el video. Puede que el enlace sea "
-                "privado, no exista, o la plataforma este bloqueando la "
+                "privado, no exista, o la plataforma esté bloqueando la "
                 f"solicitud temporalmente. Detalle: {e}"
             )
         }), 500
@@ -212,7 +199,7 @@ def descargar():
         if candidatos:
             ruta_archivo = os.path.join(DOWNLOAD_DIR, candidatos[0])
         else:
-            return jsonify({"error": "No se encontro el archivo generado."}), 500
+            return jsonify({"error": "No se encontró el archivo generado."}), 500
 
     nombre_descarga = f"{titulo}.{extension}".replace("/", "-")
 
