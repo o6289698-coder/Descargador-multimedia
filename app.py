@@ -1,3 +1,4 @@
+import os
 from flask import Flask, render_template_string, request, jsonify
 import yt_dlp
 
@@ -18,6 +19,12 @@ HTML_TEMPLATE = """
         button { background-color: #ff0055; color: white; }
         .result { margin-top: 20px; word-break: break-all; }
         .download-btn { display: inline-block; padding: 12px 24px; background: #00e676; color: #000; text-decoration: none; border-radius: 5px; font-weight: bold; margin-top: 15px; }
+        
+        /* Estilos del corazón y mensaje */
+        .heart-section { margin-top: 30px; }
+        .heart-btn { background: none; border: none; font-size: 2rem; cursor: pointer; color: #ff1744; outline: none; transition: transform 0.2s; }
+        .heart-btn:hover { transform: scale(1.2); }
+        .love-message { color: #00e676; font-weight: bold; font-size: 1.2rem; margin-top: 10px; display: none; }
     </style>
 </head>
 <body>
@@ -32,6 +39,12 @@ HTML_TEMPLATE = """
             <button type="submit">Procesar</button>
         </form>
         <div id="result" class="result"></div>
+
+        <!-- Corazón inferior -->
+        <div class="heart-section">
+            <button type="button" class="heart-btn" id="heart-btn">❤️</button>
+            <div id="love-message" class="love-message">Te amo Alexa</div>
+        </div>
     </div>
 
     <script>
@@ -64,6 +77,16 @@ HTML_TEMPLATE = """
                 resultDiv.innerHTML = `<p style="color: #ff5252;">Error de conexión con el servidor.</p>`;
             }
         });
+
+        // Interacción del corazón
+        document.getElementById('heart-btn').addEventListener('click', () => {
+            const msg = document.getElementById('love-message');
+            if (msg.style.display === 'block') {
+                msg.style.display = 'none';
+            } else {
+                msg.style.display = 'block';
+            }
+        });
     </script>
 </body>
 </html>
@@ -79,19 +102,22 @@ def procesar():
     url = data.get('url')
     formato = data.get('format', 'mp4')
 
-    # Estrategia de múltiples clientes (Fallback en cadena)
-    # Si YouTube bloquea la petición de Android, yt-dlp intenta automáticamente con iOS, Web Móvil o TV
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'ios', 'mweb', 'tv_embedded']
+                'player_client': ['android', 'ios', 'mweb']
             }
         }
     }
 
-    # Selección de formato compatible para entrega directa
+    # Busca cookies en los Secret Files de Render (/etc/secrets/cookies.txt) o en la raíz del proyecto
+    if os.path.exists('/etc/secrets/cookies.txt'):
+        ydl_opts['cookiefile'] = '/etc/secrets/cookies.txt'
+    elif os.path.exists('cookies.txt'):
+        ydl_opts['cookiefile'] = 'cookies.txt'
+
     if formato == 'mp3':
         ydl_opts['format'] = 'bestaudio/best'
     else:
