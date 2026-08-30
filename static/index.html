@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Descargador MP3 / MP4</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Descargador MP3 / MP4</h1>
+        <p class="subtitle">YouTube y Facebook</p>
+        <p class="author">Desarrollado por Erick</p>
+
+        <div class="input-group">
+            <input type="text" id="videoUrl" placeholder="Pega el enlace aquí...">
+            <button id="btnObtener" onclick="obtenerInfo()">Cargar</button>
+        </div>
+
+        <div id="preview" class="preview-card" style="display: none;">
+            <img id="thumb" src="" alt="Vista previa">
+            <h3 id="videoTitle"></h3>
+            
+            <div class="options">
+                <label for="formatSelect">Calidad/Formato:</label>
+                <select id="formatSelect"></select>
+            </div>
+            
+            <button class="btn-download" onclick="descargar()">Descargar</button>
+        </div>
+
+        <p id="statusMsg"></p>
+
+        <div class="footer-heart-container">
+            <button id="heartBtn" class="heart-btn" onclick="mostrarMensajeAmor()">❤️</button>
+            <p id="loveMsg" class="love-msg"></p>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
