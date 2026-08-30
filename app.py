@@ -1,6 +1,7 @@
 import os
 import shutil
-from flask import Flask, render_template_string, request, jsonify
+import uuid
+from flask import Flask, render_template_string, request, jsonify, send_file, after_this_request
 import yt_dlp
 
 app = Flask(__name__)
@@ -21,7 +22,6 @@ HTML_TEMPLATE = """
         .result { margin-top: 20px; word-break: break-all; }
         .download-btn { display: inline-block; padding: 12px 24px; background: #00e676; color: #000; text-decoration: none; border-radius: 5px; font-weight: bold; margin-top: 15px; }
         
-        /* Estilos del corazón y mensaje */
         .heart-section { margin-top: 30px; }
         .heart-btn { background: none; border: none; font-size: 2rem; cursor: pointer; color: #ff1744; outline: none; transition: transform 0.2s; }
         .heart-btn:hover { transform: scale(1.2); }
@@ -41,7 +41,6 @@ HTML_TEMPLATE = """
         </form>
         <div id="result" class="result"></div>
 
-        <!-- Corazón inferior -->
         <div class="heart-section">
             <button type="button" class="heart-btn" id="heart-btn">❤️</button>
             <div id="love-message" class="love-message">Te amo Alexa</div>
@@ -52,7 +51,7 @@ HTML_TEMPLATE = """
         document.getElementById('download-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const resultDiv = document.getElementById('result');
-            resultDiv.innerHTML = "Procesando enlace...";
+            resultDiv.innerHTML = "Procesando y descargando el archivo... Esto puede tardar unos segundos.";
             
             const url = document.getElementById('url').value;
             const format = document.getElementById('format').value;
@@ -69,7 +68,7 @@ HTML_TEMPLATE = """
                     resultDiv.innerHTML = `
                         <h3>${data.title}</h3>
                         <img src="${data.thumbnail}" width="100%" style="border-radius: 8px;"><br>
-                        <a href="${data.download_url}" target="_blank" download="${data.title}.${format}" class="download-btn">Descargar ${format.toUpperCase()}</a>
+                        <a href="/download_file?file=${encodeURIComponent(data.file_id)}&name=${encodeURIComponent(data.title)}&ext=${format}" class="download-btn">Descargar ${format.toUpperCase()}</a>
                     `;
                 } else {
                     resultDiv.innerHTML = `<p style="color: #ff5252;">Error: ${data.error}</p>`;
@@ -79,14 +78,9 @@ HTML_TEMPLATE = """
             }
         });
 
-        // Interacción del corazón
         document.getElementById('heart-btn').addEventListener('click', () => {
             const msg = document.getElementById('love-message');
-            if (msg.style.display === 'block') {
-                msg.style.display = 'none';
-            } else {
-                msg.style.display = 'block';
-            }
+            msg.style.display = (msg.style.display === 'block') ? 'none' : 'block';
         });
     </script>
 </body>
@@ -103,19 +97,17 @@ def procesar():
     url = data.get('url')
     formato = data.get('format', 'mp4')
 
-    # Configuración de extracción compatible
+    file_id = str(uuid.uuid4())
+    out_template = f'/tmp/{file_id}.%(ext)s'
+
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
-        'format': 'bestaudio/best' if formato == 'mp3' else 'best',
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['web', 'mweb']
-            }
-        }
+        'outtmpl': out_template,
+        'format': 'best'
     }
 
-    # Manejo de cookies
+    # Revisa si hay cookies subidas a Render
     secret_cookies = '/etc/secrets/cookies.txt'
     temp_cookies = '/tmp/cookies.txt'
 
@@ -127,23 +119,50 @@ def procesar():
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            download_url = info.get('url')
+            info = ydl.extract_info(url, download=True)
+            title = info.get('title', 'archivo')
+            thumbnail = info.get('thumbnail', '')
 
-            if not download_url and 'formats' in info:
-                for f in reversed(info['formats']):
-                    if f.get('url'):
-                        download_url = f.get('url')
-                        break
+            # Encuentra el archivo generado en /tmp
+            actual_filename = None
+            for f in os.listdir('/tmp'):
+                if f.startswith(file_id):
+                    actual_filename = f
+                    break
+
+            if not actual_filename:
+                return jsonify({'success': False, 'error': 'No se pudo generar el archivo de salida.'})
 
             return jsonify({
                 'success': True,
-                'title': info.get('title'),
-                'thumbnail': info.get('thumbnail'),
-                'download_url': download_url
+                'title': title,
+                'thumbnail': thumbnail,
+                'file_id': actual_filename
             })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/download_file')
+def download_file():
+    file_id = request.args.get('file')
+    name = request.args.get('name', 'video')
+    ext = request.args.get('ext', 'mp4')
+    
+    file_path = os.path.join('/tmp', file_id)
+
+    if not os.path.exists(file_path):
+        return "El archivo ya no está disponible o caducó.", 404
+
+    @after_this_request
+    def cleanup(response):
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        except Exception:
+            pass
+        return response
+
+    return send_file(file_path, as_attachment=True, download_name=f"{name}.{ext}")
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
