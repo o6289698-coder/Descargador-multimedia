@@ -103,17 +103,19 @@ def procesar():
     url = data.get('url')
     formato = data.get('format', 'mp4')
 
+    # Configuración de extracción compatible
     ydl_opts = {
         'quiet': True,
         'no_warnings': True,
+        'format': 'bestaudio/best' if formato == 'mp3' else 'best',
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'ios', 'mweb']
+                'player_client': ['web', 'mweb']
             }
         }
     }
 
-    # Copia cookies a /tmp para evitar problemas de lectura/escritura en Render
+    # Manejo de cookies
     secret_cookies = '/etc/secrets/cookies.txt'
     temp_cookies = '/tmp/cookies.txt'
 
@@ -126,29 +128,13 @@ def procesar():
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-            
-            download_url = None
-            formats = info.get('formats', [])
-            
-            if formato == 'mp3':
-                # Busca el mejor formato solo audio
-                for f in reversed(formats):
-                    if f.get('vcodec') == 'none' and f.get('acodec') != 'none' and f.get('url'):
+            download_url = info.get('url')
+
+            if not download_url and 'formats' in info:
+                for f in reversed(info['formats']):
+                    if f.get('url'):
                         download_url = f.get('url')
                         break
-            else:
-                # Busca el mejor formato combinado (video + audio)
-                for f in reversed(formats):
-                    if f.get('vcodec') != 'none' and f.get('acodec') != 'none' and f.get('url'):
-                        download_url = f.get('url')
-                        break
-
-            # Si no encuentra uno combinado, toma la URL principal de extracción
-            if not download_url:
-                download_url = info.get('url')
-
-            if not download_url and formats:
-                download_url = formats[-1].get('url')
 
             return jsonify({
                 'success': True,
