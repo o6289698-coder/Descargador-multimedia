@@ -1,13 +1,16 @@
 async function obtenerInfo() {
-    const url = document.getElementById('videoUrl').value;
+    const urlInput = document.getElementById('videoUrl');
+    const url = urlInput ? urlInput.value.trim() : '';
     const msg = document.getElementById('statusMsg');
     const preview = document.getElementById('preview');
 
     if (!url) {
+        msg.style.color = "#ef4444";
         msg.textContent = "Por favor ingresa un enlace.";
         return;
     }
 
+    msg.style.color = "#38bdf8";
     msg.textContent = "Analizando video y obteniendo formatos...";
     preview.style.display = 'none';
 
@@ -37,22 +40,25 @@ async function obtenerInfo() {
             preview.style.display = 'block';
             msg.textContent = "";
         } else {
-            msg.textContent = "Error: " + (data.error || "No se pudo obtener el video.");
+            msg.style.color = "#ef4444";
+            msg.textContent = data.error || "No se pudo obtener la información del video.";
         }
     } catch (err) {
-        msg.textContent = "Error al conectar con el servidor.";
+        msg.style.color = "#ef4444";
+        msg.textContent = "Error de conexión con el servidor.";
     }
 }
 
 async function descargar() {
-    const url = document.getElementById('videoUrl').value;
+    const url = document.getElementById('videoUrl').value.trim();
     const formatValue = document.getElementById('formatSelect').value;
     const msg = document.getElementById('statusMsg');
 
     if (!formatValue) return;
 
     const selectedFormat = JSON.parse(formatValue);
-    msg.textContent = "Procesando descarga, por favor espera un momento...";
+    msg.style.color = "#38bdf8";
+    msg.textContent = "Procesando descarga, esto puede tomar unos segundos...";
 
     try {
         const response = await fetch('/api/download', {
@@ -74,11 +80,14 @@ async function descargar() {
             document.body.appendChild(a);
             a.click();
             a.remove();
+            msg.style.color = "#10b981";
             msg.textContent = "¡Descarga iniciada con éxito!";
         } else {
-            msg.textContent = "Error al procesar la descarga en el servidor.";
+            msg.style.color = "#ef4444";
+            msg.textContent = "Error al procesar el archivo en el servidor.";
         }
     } catch (err) {
+        msg.style.color = "#ef4444";
         msg.textContent = "Error al realizar la descarga.";
     }
 }
