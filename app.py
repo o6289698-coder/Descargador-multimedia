@@ -123,20 +123,16 @@ def procesar():
     elif os.path.exists('cookies.txt'):
         ydl_opts['cookiefile'] = 'cookies.txt'
 
-    # Formato flexible para asegurar la extracción del enlace
+    # Selección de formato compatible para entrega de URL directa
     if formato == 'mp3':
-        ydl_opts['format'] = 'bestaudio/best'
+        ydl_opts['format'] = 'ba/b'
     else:
-        ydl_opts['format'] = 'bestvideo+bestaudio/best'
+        ydl_opts['format'] = 'b/best'
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-            
-            # Obtiene el enlace directo del objeto analizado
             download_url = info.get('url')
-            if not download_url and 'requested_formats' in info:
-                download_url = info['requested_formats'][0].get('url')
 
             return jsonify({
                 'success': True,
