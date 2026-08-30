@@ -1,0 +1,24 @@
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: Arial, sans-serif; }
+body { background-color: #0f172a; color: #f8fafc; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+.container { background: #1e293b; padding: 25px; border-radius: 12px; width: 100%; max-width: 480px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+h1 { margin-bottom: 4px; color: #38bdf8; }
+.subtitle { color: #94a3b8; font-size: 0.9rem; margin-bottom: 4px; }
+.author { color: #cbd5e1; font-size: 0.85rem; font-style: italic; margin-bottom: 20px; }
+.input-group { display: flex; gap: 8px; margin-bottom: 20px; }
+input[type="text"] { flex: 1; padding: 12px; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: #fff; outline: none; }
+button { background: #0284c7; color: white; border: none; padding: 12px 18px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+button:hover { background: #0369a1; }
+.preview-card { border-top: 1px solid #334155; padding-top: 15px; margin-top: 15px; }
+.preview-card img { width: 100%; border-radius: 8px; margin-bottom: 10px; }
+.preview-card h3 { font-size: 1rem; margin-bottom: 12px; color: #f1f5f9; }
+.options { margin-bottom: 15px; text-align: left; }
+select { width: 100%; padding: 10px; border-radius: 6px; background: #0f172a; color: #fff; border: 1px solid #334155; margin-top: 5px; }
+.btn-download { width: 100%; background: #10b981; }
+.btn-download:hover { background: #059669; }
+#statusMsg { margin-top: 15px; font-size: 0.85rem; }
+
+.footer-heart-container { margin-top: 25px; padding-top: 15px; border-top: 1px solid #334155; }
+.heart-btn { background: none; border: none; font-size: 2.2rem; cursor: pointer; transition: transform 0.2s ease, filter 0.2s ease; padding: 0; outline: none; }
+.heart-btn:hover { transform: scale(1.25); filter: drop-shadow(0 0 8px #ef4444); }
+.love-msg { opacity: 0; transition: opacity 0.4s ease, transform 0.4s ease; color: #f43f5e; font-weight: bold; font-size: 1.1rem; margin-top: 8px; transform: translateY(5px); }
+.love-msg.visible { opacity: 1; transform: translateY(0); }
