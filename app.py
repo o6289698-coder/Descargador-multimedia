@@ -108,12 +108,12 @@ def procesar():
         'no_warnings': True,
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'ios', 'web']
+                'player_client': ['android', 'ios', 'mweb']
             }
         }
     }
 
-    # Copia cookies a /tmp para evitar problemas de permisos
+    # Copia cookies a /tmp para evitar problemas de lectura/escritura en Render
     secret_cookies = '/etc/secrets/cookies.txt'
     temp_cookies = '/tmp/cookies.txt'
 
@@ -123,16 +123,32 @@ def procesar():
     elif os.path.exists('cookies.txt'):
         ydl_opts['cookiefile'] = 'cookies.txt'
 
-    # Selección de formato compatible para entrega de URL directa
-    if formato == 'mp3':
-        ydl_opts['format'] = 'ba/b'
-    else:
-        ydl_opts['format'] = 'b/best'
-
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-            download_url = info.get('url')
+            
+            download_url = None
+            formats = info.get('formats', [])
+            
+            if formato == 'mp3':
+                # Busca el mejor formato solo audio
+                for f in reversed(formats):
+                    if f.get('vcodec') == 'none' and f.get('acodec') != 'none' and f.get('url'):
+                        download_url = f.get('url')
+                        break
+            else:
+                # Busca el mejor formato combinado (video + audio)
+                for f in reversed(formats):
+                    if f.get('vcodec') != 'none' and f.get('acodec') != 'none' and f.get('url'):
+                        download_url = f.get('url')
+                        break
+
+            # Si no encuentra uno combinado, toma la URL principal de extracción
+            if not download_url:
+                download_url = info.get('url')
+
+            if not download_url and formats:
+                download_url = formats[-1].get('url')
 
             return jsonify({
                 'success': True,
