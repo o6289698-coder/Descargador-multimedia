@@ -51,7 +51,7 @@ HTML_TEMPLATE = """
         document.getElementById('download-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const resultDiv = document.getElementById('result');
-            resultDiv.innerHTML = "Procesando y descargando el archivo... Esto puede tardar unos segundos.";
+            resultDiv.innerHTML = "Procesando descarga en el servidor... espera un momento.";
             
             const url = document.getElementById('url').value;
             const format = document.getElementById('format').value;
@@ -104,18 +104,21 @@ def procesar():
         'quiet': True,
         'no_warnings': True,
         'outtmpl': out_template,
-        'format': 'best'
+        'format': 'bestaudio/best' if formato == 'mp3' else 'best',
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android_creator', 'ios', 'mweb']
+            }
+        }
     }
 
-    # Revisa si hay cookies subidas a Render
+    # Intentar usar cookies solo si existen y no están vacías
     secret_cookies = '/etc/secrets/cookies.txt'
     temp_cookies = '/tmp/cookies.txt'
 
-    if os.path.exists(secret_cookies):
+    if os.path.exists(secret_cookies) and os.path.getsize(secret_cookies) > 0:
         shutil.copy(secret_cookies, temp_cookies)
         ydl_opts['cookiefile'] = temp_cookies
-    elif os.path.exists('cookies.txt'):
-        ydl_opts['cookiefile'] = 'cookies.txt'
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -123,7 +126,6 @@ def procesar():
             title = info.get('title', 'archivo')
             thumbnail = info.get('thumbnail', '')
 
-            # Encuentra el archivo generado en /tmp
             actual_filename = None
             for f in os.listdir('/tmp'):
                 if f.startswith(file_id):
@@ -131,7 +133,7 @@ def procesar():
                     break
 
             if not actual_filename:
-                return jsonify({'success': False, 'error': 'No se pudo generar el archivo de salida.'})
+                return jsonify({'success': False, 'error': 'No se pudo generar el archivo.'})
 
             return jsonify({
                 'success': True,
@@ -151,7 +153,7 @@ def download_file():
     file_path = os.path.join('/tmp', file_id)
 
     if not os.path.exists(file_path):
-        return "El archivo ya no está disponible o caducó.", 404
+        return "El archivo ya no está disponible.", 404
 
     @after_this_request
     def cleanup(response):
