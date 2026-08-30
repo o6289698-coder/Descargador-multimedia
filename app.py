@@ -1,4 +1,5 @@
 import os
+import shutil
 from flask import Flask, render_template_string, request, jsonify
 import yt_dlp
 
@@ -112,9 +113,13 @@ def procesar():
         }
     }
 
-    # Busca cookies en los Secret Files de Render (/etc/secrets/cookies.txt) o en la raíz del proyecto
-    if os.path.exists('/etc/secrets/cookies.txt'):
-        ydl_opts['cookiefile'] = '/etc/secrets/cookies.txt'
+    # Copia las cookies a una carpeta temporal con permisos de escritura
+    secret_cookies = '/etc/secrets/cookies.txt'
+    temp_cookies = '/tmp/cookies.txt'
+
+    if os.path.exists(secret_cookies):
+        shutil.copy(secret_cookies, temp_cookies)
+        ydl_opts['cookiefile'] = temp_cookies
     elif os.path.exists('cookies.txt'):
         ydl_opts['cookiefile'] = 'cookies.txt'
 
