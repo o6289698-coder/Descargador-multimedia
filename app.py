@@ -108,12 +108,12 @@ def procesar():
         'no_warnings': True,
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'ios', 'mweb']
+                'player_client': ['android', 'ios', 'web']
             }
         }
     }
 
-    # Copia las cookies a una carpeta temporal con permisos de escritura
+    # Copia cookies a /tmp para evitar problemas de permisos
     secret_cookies = '/etc/secrets/cookies.txt'
     temp_cookies = '/tmp/cookies.txt'
 
@@ -123,16 +123,21 @@ def procesar():
     elif os.path.exists('cookies.txt'):
         ydl_opts['cookiefile'] = 'cookies.txt'
 
+    # Formato flexible para asegurar la extracción del enlace
     if formato == 'mp3':
         ydl_opts['format'] = 'bestaudio/best'
     else:
-        ydl_opts['format'] = 'best[vcodec!=none][acodec!=none]/best'
+        ydl_opts['format'] = 'bestvideo+bestaudio/best'
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-            download_url = info.get('url')
             
+            # Obtiene el enlace directo del objeto analizado
+            download_url = info.get('url')
+            if not download_url and 'requested_formats' in info:
+                download_url = info['requested_formats'][0].get('url')
+
             return jsonify({
                 'success': True,
                 'title': info.get('title'),
