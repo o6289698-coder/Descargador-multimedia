@@ -1,150 +1,116 @@
-import os
-import tempfile
-import random
-from flask import Flask, request, jsonify, send_from_directory, send_file, after_this_request
-from flask_cors import CORS
+from flask import Flask, render_template_string, request, jsonify
 import yt_dlp
 
-app = Flask(__name__, static_url_path='', static_folder='static')
-CORS(app)
+app = Flask(__name__)
 
-# Lista de User-Agents reales para rotación
-USER_AGENTS = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36',
-    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1'
-]
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Descargador Multimedia</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #121212; color: #fff; text-align: center; padding: 20px; }
+        .container { max-width: 500px; margin: 0 auto; background: #1e1e1e; padding: 20px; border-radius: 10px; }
+        input[type="text"] { width: 90%; padding: 10px; margin-bottom: 10px; border-radius: 5px; border: 1px solid #333; background: #2a2a2a; color: #fff; }
+        select, button { padding: 10px 15px; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; }
+        button { background-color: #ff0055; color: white; }
+        .result { margin-top: 20px; word-break: break-all; }
+        .download-btn { display: inline-block; padding: 12px 24px; background: #00e676; color: #000; text-decoration: none; border-radius: 5px; font-weight: bold; margin-top: 15px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Descargador de Video y Audio</h2>
+        <form id="download-form">
+            <input type="text" id="url" placeholder="Pega el enlace de YouTube aquí..." required><br>
+            <select id="format">
+                <option value="mp4">Video MP4</option>
+                <option value="mp3">Audio MP3</option>
+            </select>
+            <button type="submit">Procesar</button>
+        </form>
+        <div id="result" class="result"></div>
+    </div>
 
-def get_anti_bot_opts():
-    """Genera opciones avanzadas para burlar la detección de bots."""
-    return {
+    <script>
+        document.getElementById('download-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = "Procesando enlace...";
+            
+            const url = document.getElementById('url').value;
+            const format = document.getElementById('format').value;
+
+            try {
+                const response = await fetch('/procesar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url, format })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <h3>${data.title}</h3>
+                        <img src="${data.thumbnail}" width="100%" style="border-radius: 8px;"><br>
+                        <a href="${data.download_url}" target="_blank" download="${data.title}.${format}" class="download-btn">Descargar ${format.toUpperCase()}</a>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<p style="color: #ff5252;">Error: ${data.error}</p>`;
+                }
+            } catch (err) {
+                resultDiv.innerHTML = `<p style="color: #ff5252;">Error de conexión con el servidor.</p>`;
+            }
+        });
+    </script>
+</body>
+</html>
+"""
+
+@app.route('/')
+def index():
+    return render_template_string(HTML_TEMPLATE)
+
+@app.route('/procesar', methods=['POST'])
+def procesar():
+    data = request.get_json()
+    url = data.get('url')
+    formato = data.get('format', 'mp4')
+
+    # Estrategia de múltiples clientes (Fallback en cadena)
+    # Si YouTube bloquea la petición de Android, yt-dlp intenta automáticamente con iOS, Web Móvil o TV
+    ydl_opts = {
         'quiet': True,
         'no_warnings': True,
-        'user_agent': random.choice(USER_AGENTS),
-        'referer': 'https://www.google.com/',
-        'nocheckcertificate': True,
-        'ignoreerrors': False,
-        'logtostderr': False,
-        'no_color': True,
-        # Configuración específica para evadir restricciones de YouTube
         'extractor_args': {
             'youtube': {
-                'player_client': ['mweb', 'ios', 'web'],
-                'skip': ['dash', 'hls']
+                'player_client': ['android', 'ios', 'mweb', 'tv_embedded']
             }
-        },
-        'http_headers': {
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Accept-Language': 'es-ES,es;q=0.9,en-US;q=0.8,en;q=0.7',
-            'Sec-Fetch-Mode': 'navigate',
         }
     }
 
-@app.route('/')
-def serve_index():
-    return send_from_directory('static', 'index.html')
-
-@app.route('/api/info', methods=['POST'])
-def get_video_info():
-    data = request.json or {}
-    url = data.get('url')
-
-    if not url:
-        return jsonify({'error': 'Por favor ingresa un enlace válido'}), 400
-
-    ydl_opts = get_anti_bot_opts()
+    # Selección de formato compatible para entrega directa
+    if formato == 'mp3':
+        ydl_opts['format'] = 'bestaudio/best'
+    else:
+        ydl_opts['format'] = 'best[vcodec!=none][acodec!=none]/best'
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-            formats = [{
-                'format_id': 'audio_mp3',
-                'label': 'Audio MP3 (Mejor Calidad)',
-                'ext': 'mp3',
-                'type': 'audio'
-            }]
-
-            raw_formats = info.get('formats', [])
-            seen_resolutions = set()
-
-            for f in reversed(raw_formats):
-                height = f.get('height')
-                vcodec = f.get('vcodec')
-
-                if height and vcodec != 'none':
-                    res_label = f"{height}p"
-                    if res_label not in seen_resolutions and height >= 144:
-                        seen_resolutions.add(res_label)
-                        formats.append({
-                            'format_id': f.get('format_id'),
-                            'label': f"Video MP4 ({res_label})",
-                            'ext': 'mp4',
-                            'type': 'video',
-                            'height': height
-                        })
-
+            download_url = info.get('url')
+            
             return jsonify({
-                'title': info.get('title', 'Video sin título'),
-                'thumbnail': info.get('thumbnail', ''),
-                'duration': info.get('duration', 0),
-                'formats': formats
+                'success': True,
+                'title': info.get('title'),
+                'thumbnail': info.get('thumbnail'),
+                'download_url': download_url
             })
     except Exception as e:
-        return jsonify({'error': f'Plataforma bloqueó la petición temporalmente. Reintenta en unos segundos.'}), 500
-
-@app.route('/api/download', methods=['POST'])
-def download_video():
-    data = request.json or {}
-    url = data.get('url')
-    format_id = data.get('format_id')
-    format_type = data.get('type')
-
-    if not url or not format_id:
-        return jsonify({'error': 'Parámetros incompletos'}), 400
-
-    temp_dir = tempfile.mkdtemp()
-    ydl_opts = get_anti_bot_opts()
-
-    if format_type == 'audio':
-        ydl_opts.update({
-            'format': 'bestaudio/best',
-            'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-        })
-    else:
-        ydl_opts.update({
-            'format': f'{format_id}+bestaudio/best',
-            'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
-            'merge_output_format': 'mp4',
-        })
-
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info)
-
-            if format_type == 'audio':
-                filename = os.path.splitext(filename)[0] + '.mp3'
-
-            @after_this_request
-            def cleanup(response):
-                try:
-                    if os.path.exists(filename):
-                        os.remove(filename)
-                    os.rmdir(temp_dir)
-                except Exception:
-                    pass
-                return response
-
-            return send_file(filename, as_attachment=True)
-    except Exception as e:
-        return jsonify({'error': 'No se pudo completar la descarga.'}), 500
+        return jsonify({'success': False, 'error': str(e)})
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=10000)
     
