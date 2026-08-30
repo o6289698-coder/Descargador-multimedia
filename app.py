@@ -93,7 +93,6 @@ def procesar():
     url = data.get('url')
     formato = data.get('format', 'mp4')
 
-    # Configuración de la petición a la API pública de Cobalt
     payload = {
         "url": url,
         "downloadMode": "audio" if formato == "mp3" else "auto"
@@ -101,21 +100,27 @@ def procesar():
 
     headers = {
         "Accept": "application/json",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0"
     }
 
     try:
         response = requests.post("https://api.cobalt.tools/", json=payload, headers=headers)
         res_data = response.json()
 
-        if response.status_code == 200 and "url" in res_data:
+        # Cobalt puede devolver la URL directamente en 'url' o dentro de un objeto 'picker'
+        download_url = res_data.get('url')
+        if not download_url and 'picker' in res_data and len(res_data['picker']) > 0:
+            download_url = res_data['picker'][0].get('url')
+
+        if response.status_code == 200 and download_url:
             return jsonify({
                 'success': True,
-                'download_url': res_data['url']
+                'download_url': download_url
             })
         else:
-            error_msg = res_data.get('text', 'No se pudo obtener el enlace.')
-            return jsonify({'success': False, 'error': error_msg})
+            error_msg = res_data.get('text', res_data.get('message', 'No se pudo obtener el enlace.'))
+            return jsonify({'success': False, 'error': str(error_msg)})
             
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
