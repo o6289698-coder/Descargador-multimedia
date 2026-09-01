@@ -89,7 +89,19 @@ HTML_TEMPLATE = """
         .result h3 {
             color: #34d399;
             font-size: 1rem;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
+        }
+        .preview-container {
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: center;
+        }
+        .preview-media {
+            max-width: 100%;
+            max-height: 220px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            object-fit: cover;
         }
         .download-btn { 
             display: inline-block; 
@@ -99,7 +111,7 @@ HTML_TEMPLATE = """
             text-decoration: none; 
             border-radius: 8px; 
             font-weight: bold; 
-            margin-top: 10px;
+            margin-top: 5px;
             box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
             transition: transform 0.1s;
         }
@@ -162,7 +174,7 @@ HTML_TEMPLATE = """
         </div>
 
         <div class="dev-credit">
-            Desarrollado por <span>Erick</span> 💻✨
+            Desarrollado por <span>Erick</span>
         </div>
     </div>
 
@@ -184,8 +196,16 @@ HTML_TEMPLATE = """
 
                 const data = await response.json();
                 if (data.success) {
+                    let previewHtml = '';
+                    if (data.thumbnail && format === 'mp4') {
+                        previewHtml = `<div class="preview-container"><img src="${data.thumbnail}" class="preview-media" alt="Previsualización"></div>`;
+                    } else if (format === 'mp3' && data.thumbnail) {
+                        previewHtml = `<div class="preview-container"><img src="${data.thumbnail}" class="preview-media" alt="Previsualización"></div>`;
+                    }
+
                     resultDiv.innerHTML = `
                         <h3>${data.title}</h3>
+                        ${previewHtml}
                         <a href="/download_file?file=${encodeURIComponent(data.file_id)}&name=${encodeURIComponent(data.title)}&ext=${format}" class="download-btn">Descargar ${format.toUpperCase()}</a>
                     `;
                 } else {
@@ -236,6 +256,7 @@ def procesar():
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             title = info.get('title', 'video_descargado')
+            thumbnail = info.get('thumbnail', '')
 
             actual_filename = None
             for f in os.listdir('/tmp'):
@@ -249,6 +270,7 @@ def procesar():
             return jsonify({
                 'success': True,
                 'title': title,
+                'thumbnail': thumbnail,
                 'file_id': actual_filename
             })
     except Exception as e:
@@ -278,4 +300,4 @@ def download_file():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
-            
+    
